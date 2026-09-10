@@ -1,0 +1,61 @@
+# Browser-upload fallback. Save in the target repository as
+# .github/workflows/pages-from-bundle.yml beside website-source.tar.gz.
+name: Deploy uploaded website version
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - website-source.tar.gz
+      - .github/workflows/pages-from-bundle.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack website source
+        run: |
+          mkdir website
+          tar -xzf website-source.tar.gz -C website
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3.6'
+          bundler: '2.5.22'
+          bundler-cache: true
+          working-directory: website
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+      - name: Build website
+        working-directory: website
+        run: bundle exec jekyll build --strict_front_matter --baseurl "${{ steps.pages.outputs.base_path }}"
+        env:
+          JEKYLL_ENV: production
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
